@@ -5,7 +5,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 fn main() -> Result<(), Box<dyn Error>> {
     let mut seat_ca = SeatCA::load("input.txt")?;
-    seat_ca.run_until_stable(SeatCA::get_next);
+    seat_ca.run_until_stable(SeatCA::get_visible_next);
     dbg!(seat_ca.occupied_count());
     Ok(())
 }
@@ -70,14 +70,10 @@ impl SeatCA {
             if *x == FLOOR {
                 continue;
             }
-            let neighbors = self
-                .get_neighbors(r, c)
-                .iter()
-                .filter(|n| **n == OCCUPIED_SEAT)
-                .count();
-            if *x == EMPTY_SEAT && neighbors == 0 {
+            let visible = self.get_visible(r, c);
+            if *x == EMPTY_SEAT && visible == 0 {
                 *x = OCCUPIED_SEAT;
-            } else if *x == OCCUPIED_SEAT && neighbors >= 5 {
+            } else if *x == OCCUPIED_SEAT && visible >= 5 {
                 *x = EMPTY_SEAT;
             }
         }
@@ -91,37 +87,97 @@ impl SeatCA {
         }
     }
     fn get_visible(&self, r: usize, c: usize) -> usize {
-        // these are all wrong, as an empty seat blocks a full seat
-        let row_visible = self
+        let e_visible = self
             .mat
             .row(r)
+            .slice(s![c..])
             .iter()
-            .filter(|n| **n == OCCUPIED_SEAT)
-            .count();
-        let col_visible = self
+            .skip(1)
+            .skip_while(|n| **n == FLOOR)
+            .next()
+            .map(|n| if *n == OCCUPIED_SEAT { 1 } else { 0 })
+            .unwrap_or(0);
+        let w_visible = self
             .mat
-            .row(c)
+            .row(r)
+            .slice(s![0..c;-1])
             .iter()
-            .filter(|n| **n == OCCUPIED_SEAT)
-            .count();
-        let main_diag_visible = if r == c {
-            self.mat
-                .diag()
-                .iter()
-                .filter(|n| **n == OCCUPIED_SEAT)
-                .count()
-        } else if r > c {
-            0
-        } else {
-            1
-        };
-        0
+            .skip_while(|n| **n == FLOOR)
+            .next()
+            .map(|n| if *n == OCCUPIED_SEAT { 1 } else { 0 })
+            .unwrap_or(0);
+        let s_visible = self
+            .mat
+            .column(c)
+            .slice(s![r..])
+            .iter()
+            .skip(1)
+            .skip_while(|n| **n == FLOOR)
+            .next()
+            .map(|n| if *n == OCCUPIED_SEAT { 1 } else { 0 })
+            .unwrap_or(0);
+        let n_visible = self
+            .mat
+            .column(c)
+            .slice(s![0..r;-1])
+            .iter()
+            .skip_while(|n| **n == FLOOR)
+            .next()
+            .map(|n| if *n == OCCUPIED_SEAT { 1 } else { 0 })
+            .unwrap_or(0);
+        let se_visible = self
+            .mat
+            .slice(s![r.., c..])
+            .diag()
+            .iter()
+            .skip(1)
+            .skip_while(|n| **n == FLOOR)
+            .next()
+            .map(|n| if *n == OCCUPIED_SEAT { 1 } else { 0 })
+            .unwrap_or(0);
+        let sw_visible = self
+            .mat
+            .slice(s![r.., 0..=c;-1])
+            .diag()
+            .iter()
+            .skip(1)
+            .skip_while(|n| **n == FLOOR)
+            .next()
+            .map(|n| if *n == OCCUPIED_SEAT { 1 } else { 0 })
+            .unwrap_or(0);
+        let ne_visible = self
+            .mat
+            .slice(s![0..=r;-1, c..])
+            .diag()
+            .iter()
+            .skip(1)
+            .skip_while(|n| **n == FLOOR)
+            .next()
+            .map(|n| if *n == OCCUPIED_SEAT { 1 } else { 0 })
+            .unwrap_or(0);
+        let nw_visible = self
+            .mat
+            .slice(s![0..r;-1, 0..c;-1])
+            .diag()
+            .iter()
+            .skip_while(|n| **n == FLOOR)
+            .next()
+            .map(|n| if *n == OCCUPIED_SEAT { 1 } else { 0 })
+            .unwrap_or(0);
+        e_visible
+            + w_visible
+            + s_visible
+            + n_visible
+            + se_visible
+            + sw_visible
+            + ne_visible
+            + nw_visible
     }
     fn run_until_stable(&mut self, step_function: fn(&SeatCA) -> Array2<u8>) {
         let mut next = step_function(self);
         while next != self.mat {
             self.mat = next;
-            next = self.get_next();
+            next = step_function(self);
         }
     }
     fn occupied_count(&self) -> usize {
