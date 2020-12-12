@@ -5,9 +5,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let program = Program::load("input.txt")?;
     let mut vm = Vm {
         program,
-        facing: 0,
         x: 0,
         y: 0,
+        wx: 10,
+        wy: -1,
         instruction_pointer: 0,
     };
 
@@ -67,7 +68,8 @@ struct Vm {
     instruction_pointer: usize,
     x: i64,
     y: i64,
-    facing: i64,
+    wx: i64,
+    wy: i64,
 }
 
 impl Vm {
@@ -75,7 +77,7 @@ impl Vm {
         while &self.instruction_pointer < &self.program.instructions.len() {
             let loaded_instruction = &self.program.instructions[self.instruction_pointer].clone();
             self.exec(loaded_instruction);
-            dbg!(self.x, self.y, self.facing);
+            dbg!(self.x, self.y, self.wx, self.wy);
         }
         self.x.abs() + self.y.abs()
     }
@@ -83,43 +85,41 @@ impl Vm {
     fn exec(&mut self, instruction: &Instruction) {
         match *instruction {
             Instruction::N(arg) => {
-                self.y -= arg;
+                self.wy -= arg;
             }
             Instruction::E(arg) => {
-                self.x += arg;
+                self.wx += arg;
             }
             Instruction::S(arg) => {
-                self.y += arg;
+                self.wy += arg;
             }
             Instruction::W(arg) => {
-                self.x -= arg;
+                self.wx -= arg;
             }
             Instruction::L(arg) => {
-                self.facing -= arg;
-                if self.facing < 0 {
-                    self.facing += 360
+                let mut deg = arg;
+                while deg > 0 {
+                    let temp = self.wx;
+                    self.wx = self.wy;
+                    self.wy = temp;
+                    self.wy *= -1;
+                    deg -= 90;
                 }
             }
-            Instruction::R(arg) => self.facing = (self.facing + arg) % 360,
-            Instruction::F(arg) => match self.facing {
-                0 => {
-                    // east
-                    self.x += arg;
+            Instruction::R(arg) => {
+                let mut deg = arg;
+                while deg > 0 {
+                    let temp = self.wx;
+                    self.wx = self.wy;
+                    self.wy = temp;
+                    self.wx *= -1;
+                    deg -= 90;
                 }
-                90 => {
-                    // south
-                    self.y += arg;
-                }
-                180 => {
-                    // west
-                    self.x -= arg;
-                }
-                270 => {
-                    // north
-                    self.y -= arg;
-                }
-                _ => panic!("bad facing"),
-            },
+            }
+            Instruction::F(arg) => {
+                self.x += arg * self.wx;
+                self.y += arg * self.wy;
+            }
         }
         self.instruction_pointer += 1;
     }
