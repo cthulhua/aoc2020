@@ -1,5 +1,5 @@
 use bitvec::prelude::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -46,36 +46,53 @@ enum Instruction {
 #[derive(Clone, Debug, Default)]
 struct Mask {
     ones: u64,
-    zeros: u64,
+    floating: BitVec<Lsb0, u64>,
 }
 
 impl FromStr for Mask {
     type Err = ();
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut ones = bitvec![Lsb0, u64;0;64];
-        let mut zeros = bitvec![Lsb0, u64;1;64];
+        let mut floating = bitvec![Lsb0, u64;0;64];
         let mut chars: Vec<char> = s.chars().collect();
         chars.reverse();
         for (i, c) in chars.into_iter().enumerate() {
             match c {
                 '1' => ones.as_mut_bitslice().set(i, true),
-                '0' => zeros.as_mut_bitslice().set(i, false),
+                'X' => floating.as_mut_bitslice().set(i, true),
                 _ => (),
             }
         }
         let (_, ones, _) = ones.domain().region().unwrap();
         let ones = ones[0];
-        let (_, zeros, _) = zeros.domain().region().unwrap();
-        let zeros = zeros[0];
-        Ok(Self { ones, zeros })
+        Ok(Self { ones, floating })
     }
 }
 impl Mask {
-    fn apply(&self, val: u64) -> u64 {
+    fn apply(&self, val: u64) -> Box<dyn Iterator<Item = u64>> {
         let mut masked = val;
         masked |= self.ones;
-        masked &= self.zeros;
-        masked
+        let mut permutations: HashSet<u64> = HashSet::new();
+        permutations.insert(masked);
+        for (i, _) in self
+            .floating
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| **b == true)
+        {
+            let mut new_permutations: HashSet<u64> = HashSet::new();
+            for p in &permutations {
+                let mut new_p = bitarr![Lsb0, u64;0;64];
+                new_p.store(*p);
+                let v = !new_p.get(i).unwrap();
+                new_p.set(i, v);
+                let (_, new_p, _) = new_p.domain().region().unwrap();
+                let new_p = new_p[0];
+                new_permutations.insert(new_p);
+            }
+            permutations = permutations.union(&new_permutations).cloned().collect();
+        }
+        Box::new(permutations.into_iter())
     }
 }
 
@@ -123,7 +140,9 @@ impl Vm {
         match instruction {
             Instruction::Mask(mask) => self.mask = mask.clone(),
             Instruction::Mem(addr, val) => {
-                self.memory.insert(*addr, self.mask.apply(*val));
+                for masked_addr in self.mask.apply(*addr) {
+                    self.memory.insert(masked_addr, *val);
+                }
             }
         }
     }
