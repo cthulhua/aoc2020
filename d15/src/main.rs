@@ -10,7 +10,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .collect();
     let mut elves = Elves::new(nums);
     // let n: Vec<u64> = elves.take(2020).collect();
-    let n = elves.nth(2019).unwrap();
+    let n = elves.nth(29_999_999).unwrap();
     dbg!(n);
     Ok(())
 }
