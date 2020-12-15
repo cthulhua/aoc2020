@@ -75,6 +75,7 @@ impl Mask {
         let mut masked = val;
         masked |= self.ones;
         masked &= self.zeros;
+        masked
     }
 }
 
