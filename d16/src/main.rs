@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
@@ -28,22 +29,84 @@ fn main() -> Result<(), Box<dyn Error>> {
     let nearby_tickets: Vec<Vec<u64>> = lines
         .map(|line| line.split(",").map(|n| n.parse().unwrap()).collect())
         .collect();
-    let error_rate: u64 = nearby_tickets
+    let valid_nearby_tickets: Vec<Vec<u64>> = nearby_tickets
         .into_iter()
-        .map(|ticket| -> Vec<u64> {
+        .filter(|ticket| {
             ticket
                 .iter()
-                .cloned()
-                .filter(|n| rules.iter().all(|rule| !rule.valid(n)))
+                .all(|n| rules.iter().any(|rule| rule.valid(n)))
+        })
+        .collect();
+    let ticket_len = my_ticket.len();
+    assert!(valid_nearby_tickets
+        .iter()
+        .all(|ticket| ticket.len() == ticket_len));
+    let mut possibilities: Vec<(usize, Vec<&Rule>)> = (0..ticket_len)
+        .map(|i| {
+            rules
+                .iter()
+                .filter(|rule| {
+                    valid_nearby_tickets
+                        .iter()
+                        .all(|ticket| rule.valid(&ticket[i]))
+                })
                 .collect()
         })
-        .flatten()
-        .sum();
-    dbg!(error_rate);
+        .enumerate()
+        .collect();
+    let mut known_fields: Vec<(usize, &Rule)> = vec![];
+    while !possibilities.is_empty() {
+        let mut newly_known_fields: Vec<(usize, &Rule)> = possibilities
+            .iter()
+            .filter_map(|(i, rules)| {
+                if rules.len() == 1 {
+                    Some((*i, rules[0]))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let rules_to_delete: Vec<Rule> = newly_known_fields
+            .iter()
+            .map(|(_, rule)| rule.clone())
+            .cloned()
+            .collect();
+        possibilities = possibilities
+            .into_iter()
+            .filter_map({
+                |(i, rules)| {
+                    if rules.len() >= 1 {
+                        Some((
+                            i,
+                            rules
+                                .iter()
+                                .filter(|rule| !rules_to_delete.contains(rule))
+                                .cloned()
+                                .collect(),
+                        ))
+                    } else {
+                        None
+                    }
+                }
+            })
+            .collect();
+
+        known_fields.append(&mut newly_known_fields);
+    }
+    let decoder: HashMap<usize, Rule> = known_fields
+        .into_iter()
+        .map(|(i, rule)| (i, rule.clone()))
+        .collect();
+    let decoded_ticket: HashMap<String, u64> = my_ticket
+        .into_iter()
+        .enumerate()
+        .map(|(i, field)| (decoder.get(&i).unwrap().name.clone(), field))
+        .collect();
+    println!("{:#?}", decoded_ticket);
     Ok(())
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Rule {
     name: String,
     ranges: [RangeInclusive<u64>; 2],
