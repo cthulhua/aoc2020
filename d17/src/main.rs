@@ -20,7 +20,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 struct Space {
-    cubes: HashSet<(i64, i64, i64)>,
+    cubes: HashSet<(i64, i64, i64, i64)>,
 }
 
 impl Space {
@@ -31,7 +31,7 @@ impl Space {
         for i in 0..initial_state.len() {
             for j in 0..initial_state[0].len() {
                 if initial_state[i][j] == b'#' {
-                    new_space.add(&(i as i64, j as i64, 0));
+                    new_space.add(&(i as i64, j as i64, 0, 0));
                 }
             }
         }
@@ -41,7 +41,7 @@ impl Space {
         let mut new_space = Space {
             cubes: HashSet::new(),
         };
-        let empty_neighbors: HashSet<(i64, i64, i64)> = self
+        let empty_neighbors: HashSet<(i64, i64, i64, i64)> = self
             .cubes
             .iter()
             .map(|point| Self::neighbors(point).into_iter())
@@ -68,18 +68,20 @@ impl Space {
         });
         new_space
     }
-    fn add(&mut self, point: &(i64, i64, i64)) {
+    fn add(&mut self, point: &(i64, i64, i64, i64)) {
         self.cubes.insert(*point);
     }
 
-    fn neighbors(point: &(i64, i64, i64)) -> HashSet<(i64, i64, i64)> {
+    fn neighbors(point: &(i64, i64, i64, i64)) -> HashSet<(i64, i64, i64, i64)> {
         let mut n = HashSet::new();
-        let (x, y, z) = point;
+        let (x, y, z, w) = point;
         for i in x - 1..=x + 1 {
             for j in y - 1..=y + 1 {
                 for k in z - 1..=z + 1 {
-                    if (i, j, k) != *point {
-                        n.insert((i, j, k));
+                    for l in w - 1..=w + 1 {
+                        if (i, j, k, l) != *point {
+                            n.insert((i, j, k, l));
+                        }
                     }
                 }
             }
