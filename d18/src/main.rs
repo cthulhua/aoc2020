@@ -20,10 +20,10 @@ lazy_static! {
         use Rule::*;
 
         PrecClimber::new(vec![
-            Operator::new(add, Left)
-                | Operator::new(subtract, Left)
+            Operator::new(subtract, Left)
                 | Operator::new(multiply, Left)
                 | Operator::new(divide, Left),
+            Operator::new(add, Left),
         ])
     };
 }
