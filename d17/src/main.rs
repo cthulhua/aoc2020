@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::error::Error;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -21,18 +21,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 struct Space {
     cubes: HashSet<(i64, i64, i64)>,
-    x_index: HashMap<i64, HashSet<(i64, i64)>>,
-    y_index: HashMap<i64, HashSet<(i64, i64)>>,
-    z_index: HashMap<i64, HashSet<(i64, i64)>>,
 }
 
 impl Space {
     fn seed(initial_state: Vec<Vec<u8>>) -> Self {
         let mut new_space = Space {
             cubes: HashSet::new(),
-            x_index: HashMap::new(),
-            y_index: HashMap::new(),
-            z_index: HashMap::new(),
         };
         for i in 0..initial_state.len() {
             for j in 0..initial_state[0].len() {
@@ -46,9 +40,6 @@ impl Space {
     fn next_cycle(self) -> Self {
         let mut new_space = Space {
             cubes: HashSet::new(),
-            x_index: HashMap::new(),
-            y_index: HashMap::new(),
-            z_index: HashMap::new(),
         };
         let empty_neighbors: HashSet<(i64, i64, i64)> = self
             .cubes
@@ -79,39 +70,6 @@ impl Space {
     }
     fn add(&mut self, point: &(i64, i64, i64)) {
         self.cubes.insert(*point);
-
-        let (x, y, z) = point;
-        if !self.x_index.contains_key(x) {
-            self.x_index.insert(*x, HashSet::new());
-        }
-        let x_index = self.x_index.get_mut(x).unwrap();
-        x_index.insert((*y, *z));
-
-        if !self.y_index.contains_key(y) {
-            self.y_index.insert(*y, HashSet::new());
-        }
-        let y_index = self.y_index.get_mut(y).unwrap();
-        y_index.insert((*x, *z));
-
-        if !self.z_index.contains_key(z) {
-            self.z_index.insert(*z, HashSet::new());
-        }
-        let z_index = self.z_index.get_mut(z).unwrap();
-        z_index.insert((*x, *y));
-    }
-
-    fn remove(&mut self, point: &(i64, i64, i64)) {
-        self.cubes.remove(point);
-        let (x, y, z) = point;
-
-        let x_index = self.x_index.get_mut(x).unwrap();
-        x_index.remove(&(*y, *z));
-
-        let y_index = self.y_index.get_mut(y).unwrap();
-        y_index.remove(&(*x, *z));
-
-        let z_index = self.z_index.get_mut(z).unwrap();
-        z_index.remove(&(*x, *y));
     }
 
     fn neighbors(point: &(i64, i64, i64)) -> HashSet<(i64, i64, i64)> {
