@@ -10,15 +10,19 @@ fn main() -> Result<(), Box<dyn Error>> {
     let input = File::open(filename)?;
     let buffered = BufReader::new(input);
     let tiles: Vec<Tile> = read_tiles(buffered);
-    let top_edges: Vec<ArrayView1<u8>> = tiles.iter().map(|tile| tile.data.row(0)).collect();
-    let bottom_edges: Vec<ArrayView1<u8>> = tiles
+    let top_edges: Vec<(ArrayView1<u8>, &Tile)> =
+        tiles.iter().map(|tile| (tile.data.row(0), tile)).collect();
+    let bottom_edges: Vec<(ArrayView1<u8>, &Tile)> = tiles
         .iter()
-        .map(|tile| tile.data.row(tile.data.nrows() - 1))
+        .map(|tile| (tile.data.row(tile.data.nrows() - 1), tile))
         .collect();
-    let left_edges: Vec<ArrayView1<u8>> = tiles.iter().map(|tile| tile.data.column(0)).collect();
-    let right_edges: Vec<ArrayView1<u8>> = tiles
+    let left_edges: Vec<(ArrayView1<u8>, &Tile)> = tiles
         .iter()
-        .map(|tile| tile.data.column(tile.data.ncols() - 1))
+        .map(|tile| (tile.data.column(0), tile))
+        .collect();
+    let right_edges: Vec<(ArrayView1<u8>, &Tile)> = tiles
+        .iter()
+        .map(|tile| (tile.data.column(tile.data.ncols() - 1), tile))
         .collect();
     let edge_index = EdgeIndex::new(&top_edges, &bottom_edges, &left_edges, &right_edges);
     let corner_product: u64 = edge_index
@@ -55,7 +59,7 @@ struct Tile {
 }
 
 struct EdgeIndex<'a> {
-    edge_counts: HashMap<&'a ArrayView1<'a, u8>, usize>,
+    edge_to_tile: HashMap<&'a ArrayView1<'a, u8>, Vec<&'a Tile>>,
 }
 impl Tile {
     fn from_array(id: u64, data: Array2<u8>) -> Self {
@@ -108,25 +112,25 @@ fn read_tiles(mut buffered: BufReader<File>) -> Vec<Tile> {
 }
 impl<'a> EdgeIndex<'a> {
     fn new(
-        top: &'a Vec<ArrayView1<'a, u8>>,
-        bottom: &'a Vec<ArrayView1<'a, u8>>,
-        left: &'a Vec<ArrayView1<'a, u8>>,
-        right: &'a Vec<ArrayView1<'a, u8>>,
+        top: &'a Vec<(ArrayView1<'a, u8>, &'a Tile)>,
+        bottom: &'a Vec<(ArrayView1<'a, u8>, &'a Tile)>,
+        left: &'a Vec<(ArrayView1<'a, u8>, &'a Tile)>,
+        right: &'a Vec<(ArrayView1<'a, u8>, &'a Tile)>,
     ) -> Self {
-        let mut edge_counts: HashMap<&'a ArrayView1<'a, u8>, usize> = HashMap::new();
+        let mut edge_to_tile: HashMap<&'a ArrayView1<'a, u8>, Vec<&'a Tile>> = HashMap::new();
         let iter = top
             .iter()
             .chain(bottom.iter())
             .chain(left.iter())
             .chain(right.iter());
-        iter.for_each(|edge| {
-            if let Some(count) = edge_counts.get_mut(edge) {
-                *count += 1;
+        iter.for_each(|(edge, tile)| {
+            if let Some(v) = edge_to_tile.get_mut(edge) {
+                v.push(tile);
             } else {
-                edge_counts.insert(edge, 1);
+                edge_to_tile.insert(edge, vec![tile]);
             }
         });
-        Self { edge_counts }
+        Self { edge_to_tile }
     }
 
     fn corners(&self, tiles: &'a [Tile]) -> Vec<&'a Tile> {
@@ -144,17 +148,27 @@ impl<'a> EdgeIndex<'a> {
                     let reversed_vertical_edge = vertical_edge.slice_move(s![..;-1]);
                     let reversed_horizontal_edge = horizontal_edge.slice_move(s![..;-1]);
 
-                    if self.edge_counts.get(&vertical_edge).unwrap_or(&0usize)
+                    if self
+                        .edge_to_tile
+                        .get(&vertical_edge)
+                        .map(Vec::len)
+                        .unwrap_or(0)
                         + self
-                            .edge_counts
+                            .edge_to_tile
                             .get(&reversed_vertical_edge)
-                            .unwrap_or(&0usize)
+                            .map(Vec::len)
+                            .unwrap_or(0)
                         == 1usize
-                        && self.edge_counts.get(&horizontal_edge).unwrap_or(&0usize)
+                        && self
+                            .edge_to_tile
+                            .get(&horizontal_edge)
+                            .map(Vec::len)
+                            .unwrap_or(0)
                             + self
-                                .edge_counts
+                                .edge_to_tile
                                 .get(&reversed_horizontal_edge)
-                                .unwrap_or(&0usize)
+                                .map(Vec::len)
+                                .unwrap_or(0)
                             == 1usize
                     {
                         unmatched_count += 1
