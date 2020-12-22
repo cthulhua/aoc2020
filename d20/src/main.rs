@@ -27,13 +27,25 @@ fn main() -> Result<(), Box<dyn Error>> {
         .map(|tile| (tile.data.column(tile.data.ncols() - 1), tile))
         .collect();
     let edge_index = EdgeIndex::new(top_edges, bottom_edges, left_edges, right_edges);
-    let corner_id: u64 = edge_index
+    let mut corner = edge_index
         .corners(&tiles)
         .into_iter()
-        .map(|c| c.id)
         .next()
-        .unwrap();
-    edge_index.build_strip(tiles_copy, corner_id);
+        .unwrap()
+        .clone();
+    let owned_index: HashMap<Array1<u8>, Vec<Tile>> = edge_index
+        .edge_to_tile
+        .clone()
+        .into_iter()
+        .map(|(edge, tile)| (edge.into_owned(), tile.into_iter().cloned().collect()))
+        .collect();
+    orient_corner(&mut corner, &owned_index);
+    let left_edge = edge_index.build_strip(&tiles_copy, &Orientation::Bottom, corner);
+    let arranged_tiles: Vec<_> = left_edge
+        .into_iter()
+        .map(|tile| edge_index.build_strip(&tiles_copy, &Orientation::Right, tile))
+        .collect();
+    // let final_image = remove_borders_and_merge(arranged_tiles);
 
     Ok(())
 }
@@ -46,7 +58,7 @@ enum Corner {
 }
 
 impl Corner {
-    fn _opposite(&self) -> Self {
+    fn opposite(&self) -> Self {
         match self {
             Corner::TopLeft => Corner::BottomRight,
             Corner::TopRight => Corner::BottomLeft,
@@ -98,6 +110,14 @@ impl Tile {
     }
     fn edges(&self) -> Vec<ArrayView1<u8>> {
         vec![self.top(), self.bottom(), self.left(), self.right()]
+    }
+    fn get_edge(&self, orientation: &Orientation) -> ArrayView1<u8> {
+        match orientation {
+            Orientation::Top => self.top(),
+            Orientation::Left => self.left(),
+            Orientation::Right => self.right(),
+            Orientation::Bottom => self.bottom(),
+        }
     }
     // 90 degrees
     fn rotate(&mut self) {
@@ -225,38 +245,29 @@ impl<'a> EdgeIndex<'a> {
             .collect();
         matches
     }
-    fn build_strip(self, tiles: Vec<Tile>, corner_id: u64) -> Vec<Tile> {
+    fn build_strip(&self, _tiles: &Vec<Tile>, orientation: &Orientation, first: Tile) -> Vec<Tile> {
         let mut strip: Vec<Tile> = vec![];
         let mut used: HashSet<u64> = HashSet::new();
-        let mut first = {
-            tiles
-                .into_iter()
-                .filter(|t| t.id == corner_id)
-                .next()
-                .unwrap()
-        };
         let owned_index: HashMap<Array1<u8>, Vec<Tile>> = self
             .edge_to_tile
+            .clone()
             .into_iter()
             .map(|(edge, tile)| (edge.into_owned(), tile.into_iter().cloned().collect()))
             .collect();
-        orient_corner(&mut first, &owned_index);
         strip.push(first.clone());
         used.insert(first.id);
+        let mut prev = first.clone();
 
         while let Some(tile) = get_pair_and_orient(
-            &first.bottom().to_owned(),
-            &Orientation::Top,
+            &prev.get_edge(orientation).to_owned(),
+            &orientation.opposite(),
             &owned_index,
             &used,
         ) {
-            first = tile.clone();
+            prev = tile.clone();
             used.insert(tile.id);
             strip.push(tile);
-            dbg!(strip.len());
-            dbg!(&used);
         }
-        dbg!(strip.len());
 
         strip
     }
@@ -309,7 +320,7 @@ fn get_pair<'a>(
 
 fn get_pair_and_orient<'a>(
     edge: &Array1<u8>,
-    _orientation: &Orientation,
+    orientation: &Orientation,
     index: &'a HashMap<Array1<u8>, Vec<Tile>>,
     used: &HashSet<u64>,
 ) -> Option<Tile> {
@@ -320,40 +331,40 @@ fn get_pair_and_orient<'a>(
         .cloned();
     if let Some(ref mut t) = tile {
         let mut c = 0;
-        while &t.top().to_owned() != edge && c < 4 {
+        while &t.get_edge(orientation).to_owned() != edge && c < 4 {
             c += 1;
             t.rotate();
         }
-        if &t.top().to_owned() != edge {
+        if &t.get_edge(orientation).to_owned() != edge {
             c = 0;
             t.flip_horizontal();
-            while &t.top().to_owned() != edge && c < 4 {
+            while &t.get_edge(orientation).to_owned() != edge && c < 4 {
                 c += 1;
                 t.rotate();
             }
         }
-        if &t.top().to_owned() != edge {
+        if &t.get_edge(orientation).to_owned() != edge {
             c = 0;
+            t.flip_horizontal();
             t.flip_vertical();
-            while &t.top().to_owned() != edge && c < 4 {
+            while &t.get_edge(orientation).to_owned() != edge && c < 4 {
                 c += 1;
                 t.rotate();
             }
         }
-        if &t.top().to_owned() != edge {
+        if &t.get_edge(orientation).to_owned() != edge {
             c = 0;
             t.flip_horizontal();
-            while &t.top().to_owned() != edge && c < 4 {
+            while &t.get_edge(orientation).to_owned() != edge && c < 4 {
                 c += 1;
                 t.rotate();
             }
         }
-        assert_eq!(&t.top().to_owned(), edge);
+        assert_eq!(&t.get_edge(orientation).to_owned(), edge);
     }
     if tile.is_some() {
         return tile;
     }
-    dbg!("couldn't find one, flipping");
     let edge = &edge.slice(s![..;-1]).to_owned();
     let mut tile = index
         .get(&edge)
@@ -362,44 +373,62 @@ fn get_pair_and_orient<'a>(
         .cloned();
     if let Some(ref mut t) = tile {
         let mut c = 0;
-        let u = t.clone();
-        while &t.top().to_owned() != edge && c < 4 {
+        while &t.get_edge(orientation).to_owned() != edge && c < 4 {
             c += 1;
             t.rotate();
         }
-        if &t.top().to_owned() != edge {
+        if &t.get_edge(orientation).to_owned() != edge {
             c = 0;
-            assert_eq!(t, &u);
             t.flip_horizontal();
-            while &t.top().to_owned() != edge && c < 4 {
+            while &t.get_edge(orientation).to_owned() != edge && c < 4 {
                 c += 1;
                 t.rotate();
-                dbg!(&t.top().to_owned(), edge);
             }
         }
-        if &t.top().to_owned() != edge {
+        if &t.get_edge(orientation).to_owned() != edge {
             c = 0;
+            t.flip_horizontal();
             t.flip_vertical();
-            while &t.top().to_owned() != edge && c < 4 {
+            while &t.get_edge(orientation).to_owned() != edge && c < 4 {
                 c += 1;
                 t.rotate();
             }
         }
-        if &t.top().to_owned() != edge {
+        if &t.get_edge(orientation).to_owned() != edge {
             c = 0;
             t.flip_horizontal();
-            while &t.top().to_owned() != edge && c < 4 {
+            while &t.get_edge(orientation).to_owned() != edge && c < 4 {
                 c += 1;
                 t.rotate();
             }
         }
-        assert_eq!(&t.top().to_owned(), edge);
+        assert_eq!(&t.get_edge(orientation).to_owned(), edge);
     }
-    tile
+    tile.map(|mut t| {
+        match orientation {
+            Orientation::Top | Orientation::Bottom => t.flip_horizontal(),
+            Orientation::Left | Orientation::Right => t.flip_vertical(),
+        }
+        t
+    })
 }
 
+#[derive(Debug, PartialEq, Eq, Clone)]
 enum Orientation {
     Top,
+    Left,
+    Bottom,
+    Right,
+}
+impl Orientation {
+    fn opposite(&self) -> Self {
+        match self {
+            Orientation::Top => Orientation::Bottom,
+            Orientation::Left => Orientation::Right,
+            Orientation::Bottom => Orientation::Top,
+            Orientation::Right => Orientation::Left,
+        }
+    }
 }
 
 #[test]
