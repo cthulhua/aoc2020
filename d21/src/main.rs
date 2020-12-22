@@ -14,7 +14,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let all_allergens: HashSet<String> = facts.iter().fold(HashSet::new(), |acc, fact| {
         acc.union(&fact.allergens).cloned().collect()
     });
-    let allergens_to_ingredients: HashMap<String, HashSet<String>> = all_allergens
+    let mut allergens_to_ingredients: HashMap<String, HashSet<String>> = all_allergens
         .iter()
         .map(|allergen| {
             (
@@ -44,18 +44,42 @@ fn main() -> Result<(), Box<dyn Error>> {
             )
         })
         .collect();
-    let allergic_ingredients: HashSet<String> = allergens_to_ingredients
-        .values()
-        .fold(HashSet::new(), |acc, set| {
-            acc.union(&set).cloned().collect()
-        });
-    let ingredients: Vec<String> = facts
+    let mut canonical_dangerous_ingredients: Vec<(String, String)> = vec![];
+    while !allergens_to_ingredients.is_empty() {
+        let known_ingredients: HashMap<String, String> = allergens_to_ingredients
+            .iter()
+            .filter_map(|(k, v)| {
+                if v.len() == 1 {
+                    Some((v.iter().next().unwrap().clone(), k.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        for (k, v) in known_ingredients {
+            canonical_dangerous_ingredients.push((k.clone(), v));
+            allergens_to_ingredients.iter_mut().for_each(|(_, v)| {
+                v.remove(&k);
+            });
+            allergens_to_ingredients = allergens_to_ingredients
+                .iter()
+                .filter_map(|(k, v)| {
+                    if v.is_empty() {
+                        None
+                    } else {
+                        Some((k.clone(), v.clone()))
+                    }
+                })
+                .collect()
+        }
+    }
+    canonical_dangerous_ingredients.sort_by_key(|t| t.1.clone());
+    let sorted_vec: Vec<String> = canonical_dangerous_ingredients
         .iter()
-        .map(|fact| fact.ingredients.clone())
-        .flatten()
-        .filter(|ingredient| !allergic_ingredients.contains(ingredient))
+        .map(|t| t.0.clone())
         .collect();
-    dbg!(ingredients.len());
+    dbg!(sorted_vec.join(","));
+
     Ok(())
 }
 
