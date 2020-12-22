@@ -45,7 +45,35 @@ fn main() -> Result<(), Box<dyn Error>> {
         .into_iter()
         .map(|tile| edge_index.build_strip(&tiles_copy, &Orientation::Right, tile))
         .collect();
-    // let final_image = remove_borders_and_merge(arranged_tiles);
+    let mut final_image = Tile {
+        id: 0,
+        data: remove_borders_and_merge(arranged_tiles),
+    };
+    //TODO: the rotations x flip permutations code again, i was lazy tho, so just did it manually
+    //here
+    final_image.flip_vertical();
+    final_image.rotate();
+    final_image.rotate();
+    final_image.rotate();
+    let monster_vec =
+        Vec::from("                  # #    ##    ##    ### #  #  #  #  #  #   ".as_bytes());
+    assert_eq!(monster_vec.len(), 60);
+    let hashes_in_monster = monster_vec.iter().filter(|b| b == &&b'#').count();
+    let sea_monster: Array2<u8> = Array2::from_shape_vec((3, 20), monster_vec).unwrap();
+    let monster_count = final_image
+        .data
+        .windows((3, 20))
+        .into_iter()
+        .filter(|window| {
+            sea_monster
+                .indexed_iter()
+                .filter(|(idx, data)| data == &&b'#' && window[*idx] == b'#')
+                .count()
+                == hashes_in_monster
+        })
+        .count();
+    let total_hashes = final_image.data.iter().filter(|b| b == &&b'#').count();
+    dbg!(total_hashes - monster_count * hashes_in_monster);
 
     Ok(())
 }
@@ -411,6 +439,23 @@ fn get_pair_and_orient<'a>(
         }
         t
     })
+}
+
+fn remove_borders_and_merge(tiles: Vec<Vec<Tile>>) -> Array2<u8> {
+    let mut image = Array2::zeros((8 * 12, 8 * 12));
+    for i in 0..tiles.len() {
+        for j in 0..tiles[0].len() {
+            let borderless = tiles[i][j].data.slice(s![1..9, 1..9]);
+            for r in 0..borderless.nrows() {
+                for c in 0..borderless.ncols() {
+                    let dest_r = i * 8 + r;
+                    let dest_c = j * 8 + c;
+                    image[[dest_r, dest_c]] = borderless[[r, c]];
+                }
+            }
+        }
+    }
+    image
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
