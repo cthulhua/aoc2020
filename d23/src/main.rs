@@ -15,7 +15,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     for _ in 0..rounds {
         let (picked_up_cups, pickup_adjustment) = pick_up(current_cup_index, &mut cups);
         current_cup_index -= pickup_adjustment;
-        let target_cup_index = get_target_cup(current_cup_index, &cups);
+        let target_cup_index = get_target_cup(current_cup_index, &cups, &picked_up_cups, max);
         let tup = put_down_cups(
             current_cup_index,
             target_cup_index,
@@ -42,16 +42,21 @@ fn pick_up(current_cup_index: usize, cups: &mut Vector<u32>) -> (Vector<u32>, us
     (picked_up_cups, wrapped_index)
 }
 
-fn get_target_cup(current_cup_index: usize, cups: &Vector<u32>) -> usize {
+fn get_target_cup(
+    current_cup_index: usize,
+    cups: &Vector<u32>,
+    picked_up_cups: &Vector<u32>,
+    max: u32,
+) -> usize {
     let mut target_cup_value = cups[current_cup_index];
-    if target_cup_value == 0 {
-        target_cup_value = max_value(cups);
+    if target_cup_value == 1 {
+        target_cup_value = max_value(picked_up_cups, max);
     } else {
         target_cup_value -= 1;
     }
-    while !cups.contains(&(target_cup_value as u32)) {
-        if target_cup_value == 0 {
-            target_cup_value = max_value(cups);
+    while picked_up_cups.contains(&(target_cup_value as u32)) {
+        if target_cup_value == 1 {
+            target_cup_value = max_value(picked_up_cups, max);
         } else {
             target_cup_value -= 1;
         }
@@ -59,8 +64,11 @@ fn get_target_cup(current_cup_index: usize, cups: &Vector<u32>) -> usize {
     cups.index_of(&target_cup_value).unwrap()
 }
 
-fn max_value(cups: &Vector<u32>) -> u32 {
-    *cups.iter().max().unwrap()
+fn max_value(picked_up_cups: &Vector<u32>, max: u32) -> u32 {
+    (max - 4..=max)
+        .filter(|m| !picked_up_cups.contains(m))
+        .max()
+        .unwrap()
 }
 
 fn put_down_cups(
