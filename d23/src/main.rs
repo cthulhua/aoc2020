@@ -1,6 +1,5 @@
 use im_rc::{HashMap, Vector};
 use std::error::Error;
-
 fn main() -> Result<(), Box<dyn Error>> {
     let max: u32 = std::env::args().nth(2).unwrap().parse().unwrap();
     let rounds: u32 = std::env::args().nth(3).unwrap().parse().unwrap();
@@ -12,7 +11,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .map(|b| (b - 48u8) as u32)
         .chain(additional)
         .collect();
-    let mut cache = Cache::new();
+    let mut cache: HashMap<u32, usize> = HashMap::new();
     let mut current_cup_index = 0usize;
     for _ in 0..rounds {
         let (picked_up_cups, pickup_adjustment) = pick_up(current_cup_index, &mut cups);
@@ -29,55 +28,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         cups = tup.0;
         current_cup_index = (tup.1 + 1) % cups.len();
     }
-    cache.stats();
     Ok(())
-}
-
-struct Cache {
-    inner: HashMap<u32, usize>,
-    writes: usize,
-    misses: usize,
-    hits: usize,
-    false_hits: usize,
-}
-
-impl Cache {
-    fn new() -> Self {
-        let inner: HashMap<u32, usize> = HashMap::new();
-        Self {
-            inner,
-            writes: 0,
-            misses: 0,
-            hits: 0,
-            false_hits: 0,
-        }
-    }
-    fn get(&mut self, value: &u32) -> Option<&usize> {
-        match self.inner.get(value) {
-            None => {
-                self.misses += 1;
-                None
-            }
-            Some(index) => {
-                self.hits += 1;
-                Some(index)
-            }
-        }
-    }
-
-    fn insert(&mut self, value: u32, index: usize) {
-        self.writes += 1;
-        self.inner.insert(value, index);
-    }
-    fn stats(&self) {
-        dbg!(self.writes);
-        dbg!(self.hits);
-        dbg!(self.false_hits);
-        dbg!(self.misses);
-    }
-    fn false_hit(&mut self) {
-        self.false_hits += 1;
-    }
 }
 
 fn pick_up(current_cup_index: usize, cups: &mut Vector<u32>) -> (Vector<u32>, usize) {
@@ -98,7 +49,7 @@ fn get_target_cup(
     current_cup_index: usize,
     cups: &Vector<u32>,
     picked_up_cups: &Vector<u32>,
-    cache: &mut Cache,
+    cache: &mut HashMap<u32, usize>,
     max: u32,
 ) -> usize {
     let mut target_cup_value = cups[current_cup_index];
@@ -115,16 +66,9 @@ fn get_target_cup(
         }
     }
     if let Some(cached_index) = cache.get(&target_cup_value) {
-        //need to be careful here, as when we look this up in cups, in this method, we've already
-        //picked some up. possible solution is to do some time tracking, and use that to inform our
-        //search, rather than using index_of. because we always update the cache when we put them
-        //down, we know that in the event of a cache miss in round n, if the cache was inserted in
-        //prev round m, the real location must be within 3 * (n - m) of the last known location,
-        //since in each round the most we can do is insert/remove 3 values
         if cups[*cached_index] == target_cup_value {
             *cached_index
         } else {
-            cache.false_hit();
             let target_cup_index = cups.index_of(&target_cup_value).unwrap();
             cache.insert(target_cup_value, target_cup_index);
             target_cup_index
@@ -148,11 +92,10 @@ fn put_down_cups(
     target_cup_index: usize,
     cups: Vector<u32>,
     picked_up_cups: Vector<u32>,
-    cache: &mut Cache,
+    cache: &mut HashMap<u32, usize>,
 ) -> (Vector<u32>, usize) {
     let wrapped_target_cup_index = (target_cup_index + 1) % (cups.len());
     let (mut lh, rh) = cups.split_at(wrapped_target_cup_index);
-    // here we're caching where the cups will be when we put them down
     picked_up_cups.iter().enumerate().for_each(|(idx, val)| {
         cache.insert(*val, lh.len() + idx);
     });
