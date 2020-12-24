@@ -13,11 +13,7 @@ use std::io::{BufRead, BufReader};
 struct HexParser;
 
 #[derive(Debug)]
-struct Hex {
-    x: i32,
-    y: i32,
-    z: i32,
-}
+struct Hex((i32, i32, i32));
 
 enum Direction {
     East,
@@ -30,38 +26,38 @@ enum Direction {
 
 impl Hex {
     fn new() -> Hex {
-        Hex { x: 0, y: 0, z: 0 }
+        Hex((0, 0, 0))
     }
 
     fn as_tuple(&self) -> (i32, i32, i32) {
-        (self.x, self.y, self.z)
+        self.0
     }
 
     fn go(&mut self, direction: &Direction) {
         match direction {
             Direction::East => {
-                self.x += 1;
-                self.y -= 1;
+                self.0 .0 += 1;
+                self.0 .1 -= 1;
             }
             Direction::Southeast => {
-                self.z += 1;
-                self.y -= 1;
+                self.0 .2 += 1;
+                self.0 .1 -= 1;
             }
             Direction::Southwest => {
-                self.x -= 1;
-                self.z += 1;
+                self.0 .0 -= 1;
+                self.0 .2 += 1;
             }
             Direction::West => {
-                self.x -= 1;
-                self.y += 1;
+                self.0 .0 -= 1;
+                self.0 .1 += 1;
             }
             Direction::Northwest => {
-                self.z -= 1;
-                self.y += 1;
+                self.0 .2 -= 1;
+                self.0 .1 += 1;
             }
             Direction::Northeast => {
-                self.x += 1;
-                self.z -= 1;
+                self.0 .0 += 1;
+                self.0 .2 -= 1;
             }
         }
     }
