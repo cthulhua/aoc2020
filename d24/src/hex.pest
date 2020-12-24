@@ -1,0 +1,11 @@
+direction = _{ east | southeast | southwest | west | northwest | northeast }
+    east      = { "e" }
+    southeast = { "se" }
+    southwest = { "sw" }
+    west   = { "w" }
+    northwest   = { "nw" }
+    northeast   = { "ne" }
+
+path = { direction* }
+
+hex = _{ SOI ~ path ~ EOI }
