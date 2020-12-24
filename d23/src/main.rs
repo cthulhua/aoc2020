@@ -1,92 +1,75 @@
-use im_rc::Vector;
 use std::error::Error;
+mod list;
+use list::List;
+
 fn main() -> Result<(), Box<dyn Error>> {
-    let max: u32 = std::env::args().nth(2).unwrap().parse().unwrap();
-    let rounds: u32 = std::env::args().nth(3).unwrap().parse().unwrap();
-    let additional = 10u32..=max;
-    let mut cups: Vector<u32> = std::env::args()
+    let max: usize = std::env::args().nth(2).unwrap().parse().unwrap();
+    let rounds: usize = std::env::args().nth(3).unwrap().parse().unwrap();
+    let additional = 10usize..=max;
+    let mut cups: List<usize> = std::env::args()
         .nth(1)
         .unwrap()
         .bytes()
-        .map(|b| (b - 48u8) as u32)
+        .map(|b| (b - 48u8) as usize)
         .chain(additional)
         .collect();
-    let mut current_cup_index = 0usize;
+    let cup_index: Vec<usize> = build_index(&cups);
+    let mut current_cup_index = cups.head;
     for _ in 0..rounds {
-        let (picked_up_cups, pickup_adjustment) = pick_up(current_cup_index, &mut cups);
-        current_cup_index -= pickup_adjustment;
-        let target_cup_index = get_target_cup(current_cup_index, &cups, &picked_up_cups, max);
-        let tup = put_down_cups(
-            current_cup_index,
-            target_cup_index,
-            cups.clone(),
-            picked_up_cups,
-        );
-        cups = tup.0;
-        current_cup_index = (tup.1 + 1) % cups.len();
+        let picked_up_cups = pick_up(current_cup_index, &mut cups);
+        let target_cup_index =
+            get_target_cup(current_cup_index, &cups, &picked_up_cups, &cup_index, max);
+        // let tup = put_down_cups(current_cup_index, target_cup_index, cups, picked_up_cups);
+        cups.add_fragment(target_cup_index, picked_up_cups.0, picked_up_cups.1);
+        current_cup_index = cups.get_node(current_cup_index).next;
     }
+    let node1 = cups.get_node(cup_index[1]);
+    let node2 = cups.get_node(node1.next);
+    let node3 = cups.get_node(node2.next);
+    dbg!(node2.value * node3.value);
     Ok(())
 }
 
-fn pick_up(current_cup_index: usize, cups: &mut Vector<u32>) -> (Vector<u32>, usize) {
-    let wrapped_index = (current_cup_index + 1).min(cups.len());
-    let mut picked_up_cups = cups.slice(wrapped_index..(wrapped_index + 3).min(cups.len()));
-    let wrapped_index = match picked_up_cups.len() {
-        3 => 0,
-        2 => 1,
-        1 => 2,
-        0 => 3,
-        _ => panic!("unreachable"),
-    };
-    picked_up_cups.append(cups.slice(0..wrapped_index));
-    (picked_up_cups, wrapped_index)
+fn pick_up(current_cup_index: usize, cups: &mut List<usize>) -> (usize, usize) {
+    cups.remove_next_n(current_cup_index, 3)
 }
 
 fn get_target_cup(
     current_cup_index: usize,
-    cups: &Vector<u32>,
-    picked_up_cups: &Vector<u32>,
-    max: u32,
+    cups: &List<usize>,
+    picked_up_cups: &(usize, usize),
+    cup_index: &Vec<usize>,
+    max: usize,
 ) -> usize {
-    let mut target_cup_value = cups[current_cup_index];
+    let mut target_cup_value = cups.get_node(current_cup_index).value;
     if target_cup_value == 1 {
-        target_cup_value = max_value(picked_up_cups, max);
+        target_cup_value = max_value(picked_up_cups, cups, max);
     } else {
         target_cup_value -= 1;
     }
-    while picked_up_cups.contains(&(target_cup_value as u32)) {
+    while cups.fragment_contains(picked_up_cups.0, picked_up_cups.1, &target_cup_value) {
         if target_cup_value == 1 {
-            target_cup_value = max_value(picked_up_cups, max);
+            target_cup_value = max_value(picked_up_cups, cups, max);
         } else {
             target_cup_value -= 1;
         }
     }
-    cups.index_of(&target_cup_value).unwrap()
+    cup_index[target_cup_value]
 }
 
-fn max_value(picked_up_cups: &Vector<u32>, max: u32) -> u32 {
+fn max_value(fragment: &(usize, usize), cups: &List<usize>, max: usize) -> usize {
     (max - 4..=max)
-        .filter(|m| !picked_up_cups.contains(m))
+        .filter(|m| !cups.fragment_contains(fragment.0, fragment.1, m))
         .max()
         .unwrap()
 }
 
-fn put_down_cups(
-    current_cup_index: usize,
-    target_cup_index: usize,
-    cups: Vector<u32>,
-    picked_up_cups: Vector<u32>,
-) -> (Vector<u32>, usize) {
-    let wrapped_target_cup_index = (target_cup_index + 1) % (cups.len());
-    let (mut lh, rh) = cups.split_at(wrapped_target_cup_index);
-    lh.append(picked_up_cups);
-    lh.append(rh);
-    (
-        lh,
-        if wrapped_target_cup_index <= current_cup_index {
-            current_cup_index + 3 //TODO this might not always be 3
-        } else {
-            current_cup_index
-        },
-    )
+fn build_index(cups: &List<usize>) -> Vec<usize> {
+    let mut index: Vec<usize> = vec![0; 1_000_0001];
+    for (arena_idx, node) in cups.arena.iter() {
+        let idx = node.value;
+        let dest = index.get_mut(idx).unwrap();
+        *dest = arena_idx;
+    }
+    index
 }
